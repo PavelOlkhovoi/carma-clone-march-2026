@@ -79,18 +79,6 @@ const router = createHashRouter(
     {
       path: "/",
       element: <NavBarWrapper />,
-      // errorElement: productionMode && (
-      //   <Result
-      //     status="404"
-      //     title="404"
-      //     subTitle="Die Seite wurde nicht gefunden"
-      //     extra={
-      //       <Button type="primary" href="/">
-      //         Zurück
-      //       </Button>
-      //     }
-      //   />
-      // ),
       children: [
         {
           path: "/",
