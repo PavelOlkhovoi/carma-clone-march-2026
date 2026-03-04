@@ -1,12 +1,12 @@
 name: PR Deployment
 
 run-name: >
-  🚀 Deploy PR #${{ github.event.pull_request.number }} - 
+  🚀 Deploy PR #${{ github.event.pull_request.number }} -
   ${{ github.event.pull_request.title }}
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, edited, labeled]
 
 jobs:
   preparation:
@@ -66,10 +66,10 @@ jobs:
         if: steps.parse-job-node-cache.outputs.cache-hit != 'true'
         run: npm install
 
-      - name: Parse PR labels for deploy projects
+      - name: Parse deploy projects from labels and PR description
         id: parse_deploy_projects
         run: |
-          # Get all labels from the PR as JSON array
+          # ===== SOURCE 1: PR Labels =====
           LABELS_JSON='${{ toJson(github.event.pull_request.labels.*.name) }}'
 
           echo "==================================="
@@ -77,16 +77,42 @@ jobs:
           echo "$LABELS_JSON" | jq -r '.[]'
           echo "==================================="
 
-          # Extract project names from labels with "deploy:" prefix
-          requested_projects=$(echo "$LABELS_JSON" | jq -r '.[] | select(startswith("deploy:")) | sub("^deploy:"; "")')
+          label_projects=$(echo "$LABELS_JSON" | jq -r '.[] | select(startswith("deploy:")) | sub("^deploy:"; "")' || echo "")
+
+          echo "Projects from labels: $label_projects"
+
+          # ===== SOURCE 2: PR Description =====
+          PR_BODY='${{ github.event.pull_request.body }}'
 
           echo "==================================="
-          echo "Requested projects from labels:"
-          echo "$requested_projects"
+          echo "PR Description:"
+          echo "$PR_BODY"
           echo "==================================="
 
-          if [ -z "$requested_projects" ]; then
-            echo "No deploy labels found on PR"
+          DEPLOY_LINE=$(echo "$PR_BODY" | grep -o 'deploy:[[:space:]]*\[.*\]' || echo "")
+          description_projects=""
+
+          if [ -n "$DEPLOY_LINE" ]; then
+            PROJECTS_JSON=$(echo "$DEPLOY_LINE" | sed -E 's/deploy:[[:space:]]*(\[.*\])/\1/')
+            if echo "$PROJECTS_JSON" | jq empty 2>/dev/null; then
+              description_projects=$(echo "$PROJECTS_JSON" | jq -r '.[]')
+            else
+              echo "Invalid JSON format in deploy directive - skipping description source"
+            fi
+          fi
+
+          echo "Projects from description: $description_projects"
+
+          # ===== MERGE & DEDUPLICATE =====
+          all_projects=$(printf '%s\n%s' "$label_projects" "$description_projects" | sort -u | sed '/^$/d')
+
+          echo "==================================="
+          echo "All requested projects (merged & deduplicated):"
+          echo "$all_projects"
+          echo "==================================="
+
+          if [ -z "$all_projects" ]; then
+            echo "No deploy projects found from labels or description"
             echo "project_list=[]" >> $GITHUB_OUTPUT
             echo "has_projects=false" >> $GITHUB_OUTPUT
             exit 0
@@ -103,7 +129,8 @@ jobs:
 
           # Build array of valid projects
           valid_array=()
-          for project in $requested_projects; do
+          for project in $all_projects; do
+            # Check if project exists in deployment config
             if echo "$deployment_projects" | grep -q "^${project}$"; then
               echo "✅ Project '$project' found in deployment configuration"
               valid_array+=("$project")
@@ -163,11 +190,18 @@ jobs:
                 echo "- \`$project\`"
               done
             else
-              echo "ℹ️ No valid deploy labels found on PR."
+              echo "ℹ️ No valid projects found."
               echo ""
-              echo "To deploy projects, add labels with the \`deploy:\` prefix:"
+              echo "To deploy projects, use one or both methods:"
+              echo ""
+              echo "**Option 1 - Labels:** Add labels with the \`deploy:\` prefix:"
               echo '```'
               echo 'deploy:stadtplan  deploy:legals  etc.'
+              echo '```'
+              echo ""
+              echo "**Option 2 - PR Description:** Add the following to your PR description:"
+              echo '```'
+              echo 'deploy: ["project1","project2"]'
               echo '```'
             fi
           } >> $GITHUB_STEP_SUMMARY
