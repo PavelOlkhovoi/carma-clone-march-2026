@@ -1,0 +1,14 @@
+/* react-image-lightbox (used via PhotoLightbox from the react-cismap library)
+   has a hardcoded English error message "This image failed to load" with no
+   i18n prop exposed through the wrapper. We hide the English text via
+   color:transparent and inject the German translation via a ::after element. */
+.ril__errorContainer {
+  color: transparent !important;
+  position: relative;
+}
+.ril__errorContainer::after {
+  content: "Dieses Bild konnte nicht geladen werden";
+  color: #fff;
+  font-size: 16px;
+  position: absolute;
+}
