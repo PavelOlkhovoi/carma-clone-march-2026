@@ -472,10 +472,10 @@ jobs:
       #     INPUT_PLATFORMS="linux/amd64" INPUT_TAGS="${{ env.CONTAINER_IMAGE }}dev-latest" ${{ env.ADDITIONAL_ENVS }} npx nx run ${{ matrix.project }}:container
       #   shell: bash
       # - name: Build container if container image is set (live)
-        if: env.CONTAINER_IMAGE != 'null' && env.CONTAINER_IMAGE != '' && env.TARGET == 'auto.live'
-        run: |
-          INPUT_PLATFORMS="linux/amd64" INPUT_TAGS="${{ env.CONTAINER_IMAGE }}latest,${{ env.CONTAINER_IMAGE }}${{env.VERSION}}" ${{ env.ADDITIONAL_ENVS }} npx nx run ${{ matrix.project }}:container
-        shell: bash
+        # if: env.CONTAINER_IMAGE != 'null' && env.CONTAINER_IMAGE != '' && env.TARGET == 'auto.live'
+        # run: |
+        #   INPUT_PLATFORMS="linux/amd64" INPUT_TAGS="${{ env.CONTAINER_IMAGE }}latest,${{ env.CONTAINER_IMAGE }}${{env.VERSION}}" ${{ env.ADDITIONAL_ENVS }} npx nx run ${{ matrix.project }}:container
+        # shell: bash
 
   smokeTest:
     needs: [determine_projects]
