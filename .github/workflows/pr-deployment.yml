@@ -6,7 +6,7 @@ run-name: >
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   preparation:
@@ -66,38 +66,27 @@ jobs:
         if: steps.parse-job-node-cache.outputs.cache-hit != 'true'
         run: npm install
 
-      - name: Parse PR description for deploy projects
+      - name: Parse PR labels for deploy projects
         id: parse_deploy_projects
         run: |
-          # Get PR description
-          PR_BODY='${{ github.event.pull_request.body }}'
+          # Get all labels from the PR as JSON array
+          LABELS_JSON='${{ toJson(github.event.pull_request.labels.*.name) }}'
 
           echo "==================================="
-          echo "PR Description:"
-          echo "$PR_BODY"
+          echo "PR Labels:"
+          echo "$LABELS_JSON" | jq -r '.[]'
           echo "==================================="
 
-          # Extract deploy array using grep and sed
-          # Looking for pattern: deploy: ["project1","project2"]
-          DEPLOY_LINE=$(echo "$PR_BODY" | grep -o 'deploy:[[:space:]]*\[.*\]' || echo "")
+          # Extract project names from labels with "deploy:" prefix
+          requested_projects=$(echo "$LABELS_JSON" | jq -r '.[] | select(startswith("deploy:")) | sub("^deploy:"; "")')
 
-          echo "Found deploy line: $DEPLOY_LINE"
+          echo "==================================="
+          echo "Requested projects from labels:"
+          echo "$requested_projects"
+          echo "==================================="
 
-          if [ -z "$DEPLOY_LINE" ]; then
-            echo "No deploy directive found in PR description"
-            echo "project_list=[]" >> $GITHUB_OUTPUT
-            echo "has_projects=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Extract the JSON array part
-          PROJECTS_JSON=$(echo "$DEPLOY_LINE" | sed -E 's/deploy:[[:space:]]*(\[.*\])/\1/')
-
-          echo "Extracted JSON: $PROJECTS_JSON"
-
-          # Validate it's valid JSON
-          if ! echo "$PROJECTS_JSON" | jq empty 2>/dev/null; then
-            echo "Invalid JSON format in deploy directive"
+          if [ -z "$requested_projects" ]; then
+            echo "No deploy labels found on PR"
             echo "project_list=[]" >> $GITHUB_OUTPUT
             echo "has_projects=false" >> $GITHUB_OUTPUT
             exit 0
@@ -112,19 +101,9 @@ jobs:
           echo "$deployment_projects"
           echo "==================================="
 
-          # Parse requested projects and validate them
-          requested_projects=$(echo "$PROJECTS_JSON" | jq -r '.[]')
-          valid_projects="[]"
-
-          echo "==================================="
-          echo "Requested projects from PR:"
-          echo "$requested_projects"
-          echo "==================================="
-
           # Build array of valid projects
           valid_array=()
           for project in $requested_projects; do
-            # Check if project exists in deployment config
             if echo "$deployment_projects" | grep -q "^${project}$"; then
               echo "✅ Project '$project' found in deployment configuration"
               valid_array+=("$project")
@@ -184,11 +163,11 @@ jobs:
                 echo "- \`$project\`"
               done
             else
-              echo "ℹ️ No valid projects found in PR description."
+              echo "ℹ️ No valid deploy labels found on PR."
               echo ""
-              echo "To deploy projects, add the following to your PR description:"
+              echo "To deploy projects, add labels with the \`deploy:\` prefix:"
               echo '```'
-              echo 'deploy: ["project1","project2"]'
+              echo 'deploy:stadtplan  deploy:legals  etc.'
               echo '```'
             fi
           } >> $GITHUB_STEP_SUMMARY
